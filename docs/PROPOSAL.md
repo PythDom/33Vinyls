@@ -2,7 +2,7 @@
 
 **A private web app, installable on Android, that identifies a vinyl record, tells you which pressing it is and what it is worth, and keeps your collection and wantlist in one place.**
 
-Status: Draft proposal · v0.4 · 2026-11-11
+Status: Draft proposal · v0.5 · 2026-11-11
 
 > **Project constraints**
 > - **Web app required**, and it **must run on Android** → built as an installable web app (PWA) that runs in Chrome on Android and in any desktop browser.
@@ -147,7 +147,7 @@ Trade-off: camera control and scanning speed are a little below a native app. Th
 | Backend | Python + FastAPI | Simple; good image/ML libraries |
 | Database | SQLite inside a Docker volume | Plenty for a few users; snapshots exported to a Windows folder (§5.6) |
 | Hosting | Docker Desktop (WSL 2) on my Windows home server, one `docker compose` file | Uses hardware I already have; €0/month |
-| Remote access + HTTPS | Tailscale on the Windows host (`tailscale serve`, or Funnel for friends without Tailscale) | Free; no router port-forwarding; HTTPS is **required** for camera access in the browser |
+| Remote access + HTTPS | Tailscale on the Windows host (`tailscale serve`); friends join the Tailscale network (§5.7) | Free; nothing exposed to the public internet; no router port-forwarding; HTTPS is **required** for camera access in the browser |
 | Auth | Invite codes + passkeys or email/password; Discogs linked per user via OAuth | Keeps it private; each friend uses their own Discogs account |
 
 ### 5.3 Free vs. optional paid services
@@ -212,6 +212,18 @@ D:\33Vinyls\sync\
 - **Direction:** export is one-way by default (container → folder) to keep it safe. Changes made outside, such as an edited CSV, are brought back in deliberately through the `import\` folder, with a preview before anything is overwritten.
 - **Privacy:** exports never include Discogs tokens or passwords. Friends' data is exported only for the server owner's backup; it is never shared with other friends unless they opted in.
 
+### 5.7 Friends' access via Tailscale
+
+The app is **not reachable from the public internet**. Only devices on my Tailscale network can open it.
+
+- **How friends join:** each friend installs the Tailscale app on their Android phone (and laptop if they want), signs in with their own free Tailscale account, and accepts my invitation.
+- **Recommended: share only the server.** Use Tailscale's *machine sharing* to share just the Windows server with each friend. They can reach 33Vinyls, but not my other devices, and they keep their own Tailscale account. Shared machines don't count as extra users on my plan.
+- **Alternative: invite them as users** of my Tailscale network. Then restrict them with access rules (ACLs) so they can only reach the server on the app's port. The free plan caps the number of users, so check Tailscale's current limits.
+- **Address:** everyone opens the same HTTPS address, e.g. `https://vinyl-server.<tailnet>.ts.net`, served by `tailscale serve` from the Windows host to the app container. Then "Add to Home screen" in Chrome on Android.
+- **Two locks:** being on the Tailscale network only lets a device *reach* the app; each friend still needs their 33Vinyls invite and login.
+- **Removing someone:** stop sharing the server with them in Tailscale and disable their 33Vinyls account.
+- **Note:** Tailscale must be switched on on the phone when using the app. Offline mode still works without it; changes sync once Tailscale is connected again.
+
 ## 6. MVP scope (≈ 6–8 weeks, part-time)
 
 **In:**
@@ -233,7 +245,7 @@ D:\33Vinyls\sync\
 
 | Weeks | Deliverable |
 |---|---|
-| 1 | Docker Compose on the Windows server, Tailscale HTTPS, PWA shell installable on Android, Discogs app registration + OAuth sign-in test, data model |
+| 1 | Docker Compose on the Windows server, Tailscale HTTPS, share the server with one friend and test the address from their phone, PWA shell installable on Android, Discogs app registration + OAuth sign-in test, data model |
 | 2–3 | Barcode + text search → release page → add to collection; accounts and invites |
 | 4–5 | Cover-photo and label OCR identification, pressing picker, runout entry, price card |
 | 6 | Wantlist, offline store + sync, Discogs collection/wantlist import, sync-folder exports + restore, sharing settings |
@@ -254,6 +266,7 @@ D:\33Vinyls\sync\
 | Discogs rate limits or terms change | Backend cache; personal non-commercial use; CSV export so nothing is lost |
 | Browser OCR struggles with covers/runouts | Quick manual correction; optional AI plug-in for hard cases |
 | Camera blocked without HTTPS | HTTPS via Tailscale from day one |
+| Friend forgets to switch Tailscale on | App works offline and shows "Can't reach server — is Tailscale on?"; syncs when reconnected |
 | Home server offline (sleep, Windows updates, reboots) | Sleep disabled, containers auto-restart, Docker Desktop starts at login; phones keep working offline and sync later |
 | Sync app copies a half-written database | Live DB stays in a Docker volume; only finished snapshots are written to the sync folder |
 | A friend's Discogs link expires or is revoked | App shows "Reconnect Discogs"; cached data keeps working meanwhile |
@@ -270,7 +283,7 @@ D:\33Vinyls\sync\
 |---|---|
 | Platform | Installable web app (PWA) for Android + desktop browsers; no Play Store |
 | Hosting | Windows home server, Docker Desktop, Docker Compose |
-| Remote access | Tailscale (HTTPS) |
+| Remote access | Tailscale (HTTPS); friends join my Tailscale network, ideally via machine sharing of the server only; no public link |
 | Data outside the container | Scheduled snapshots + CSV/JSON + photos in a Windows sync folder, picked up by a file-sync app |
 | Sharing | Opt-in per person (collection, wantlist, values separately), off by default |
 | Currency | EUR |
@@ -280,8 +293,12 @@ D:\33Vinyls\sync\
 
 ## 11. Open questions
 
-1. Which sync app do you use ("syndic" — Syncthing, or another one)? The design works with any folder-sync tool, but this decides the folder layout details.
-2. Should friends reach the app by joining your Tailscale network, or through a public Tailscale Funnel link (simpler for them, but reachable from the internet behind the app's login)?
+**Which sync app, and what should it do?** "Syndic" didn't match an app I know, so I need a bit more detail. The app will write its copies to a normal Windows folder (`D:\33Vinyls\sync`) in any case. The answers below decide where that folder goes and whether the app needs to watch for files coming back.
+
+1. **App name:** which app is it (e.g. Syncthing, Synology Drive, Resilio Sync, OneDrive, Google Drive, SyncBack)?
+2. **Destination:** where should the copies end up: another PC, a NAS, a USB/external drive, cloud storage, or your phone?
+3. **Purpose:** is it only a **backup** (copies go out), or do you also want to **edit files elsewhere** (e.g. a CSV in Excel on another PC) and have the changes come back into 33Vinyls?
+4. **Folder rules:** can the app sync any folder you choose, or only one fixed folder (as OneDrive does)? If it's fixed, the sync folder will be placed inside it.
 
 ---
 

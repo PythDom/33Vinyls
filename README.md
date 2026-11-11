@@ -9,6 +9,7 @@ A private music record **identifier, pressing detector & finder** for price chec
 - Collection with total value, duplicate warnings and offline access
 - Wantlist highlighted while digging in shops
 - Each friend links their own Discogs account; sharing with friends is opt-in
+- Private: friends reach the app through the owner's Tailscale network only
 - Data exported to a Windows folder that any file-sync app can sync
 
 Audio recognition is on hold.

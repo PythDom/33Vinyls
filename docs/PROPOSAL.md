@@ -2,14 +2,14 @@
 
 **A private web app, installable on Android, that identifies a vinyl record, tells you which pressing it is and what it is worth, and keeps your collection and wantlist in one place.**
 
-Status: Draft proposal · v0.6 · 2026-11-11
+Status: Draft proposal · v0.7 · 2026-11-11
 
 > **Project constraints**
 > - **Web app required**, and it **must run on Android** → built as an installable web app (PWA) that runs in Chrome on Android and in any desktop browser.
 > - **Private use:** for me and a few interested friends. **No Google Play release.**
 > - **Free by default:** everything works on free APIs and self-hosting. Paid services are optional plug-ins.
 > - **Hosted on my Windows home server** in Docker containers (Docker Desktop).
-> - **Data syncable outside the container**, the same way my Syndic app does it (see §5.6 and §11).
+> - **Data synced outside the container to OneDrive**, using the same approach as my Syndic app, with automatic exports added (see §5.6).
 > - **Sharing between friends is opt-in**, off by default.
 > - **Prices in EUR.**
 > - **Each friend links their own Discogs account.**
@@ -118,8 +118,8 @@ A small, invite-only group: me plus a handful of friends. Each person has their 
                                              ▼ export       │                        │
                                   ┌──────────────────────┐  │                        │
                                   │ Windows folder       │  │                        │
-                                  │ D:\33Vinyls\sync     │  │                        │
-                                  │ → file-sync app      │  │ eBay API (optional)    │
+                                  │ OneDrive\…\33Vinyls  │  │                        │
+                                  │ → OneDrive cloud     │  │ eBay API (optional)    │
                                   └──────────────────────┘  │ AI vision API (opt.)   │
                                                             └────────────────────────┘
 ```
@@ -159,7 +159,7 @@ Trade-off: camera control and scanning speed are a little below a native app. Th
 | eBay listings | eBay developer account (free) | — |
 | Photo identification | OCR + Discogs search + cover re-ranking | AI vision API with the user's own key (pay per use) |
 | Hosting | Windows home server + Docker Desktop + Tailscale | — |
-| Backups / sync | Sync folder + free file-sync app (e.g. Syncthing) to another PC or drive | Cloud storage, if the sync app supports it |
+| Backups / sync | Snapshots + photos exported to the OneDrive folder; OneDrive uploads them | More OneDrive storage, only if photos outgrow the free/included space |
 
 Each paid service is behind a setting and only turns on when an API key is entered. The app works fully without any of them.
 
@@ -172,45 +172,64 @@ Each paid service is behind a setting and only turns on when an API key is enter
 - Discogs marketplace **sold history** is not available through the API; prices are based on current listings and Discogs price suggestions.
 - API tokens live on the backend, not in the browser, and are excluded from the sync-folder exports.
 
-### 5.5 Home server setup (Windows + Docker)
+### 5.5 Home server setup (Windows + Docker), same layout as Syndic
 
 ```
 Windows home server
 ├─ Docker Desktop (WSL 2 backend, starts with Windows)
-│   └─ docker compose
+│   ├─ Syndic           – port 7500 (existing)
+│   └─ 33Vinyls (docker compose)  – port 7510
 │       ├─ web      – serves the PWA + API (FastAPI)
-│       └─ worker   – price cache refresh, scheduled exports, price watch
+│       └─ worker   – price cache refresh, scheduled sync, price watch
 │       volumes:
-│       ├─ 33vinyls-data  → live SQLite DB + photos (Docker volume, fast and safe)
-│       └─ D:\33Vinyls\sync → /sync (Windows folder, bind mount)
-├─ Tailscale (Windows app) → https://<server>.<tailnet>.ts.net
-└─ File-sync app watching D:\33Vinyls\sync
+│       ├─ 33vinyls-data → /data      named volume: live SQLite DB, photos, secret key
+│       └─ D:\OneDrive\Python\33Vinyls\sync → /sync   bind mount: copies only
+├─ Tailscale (Windows app) → https://<server>.<tailnet>.ts.net → localhost:7510
+└─ OneDrive client → uploads the sync folder to the cloud continuously
 ```
 
-- Containers use `restart: unless-stopped`, so they come back after reboots and Windows updates.
-- Docker Desktop set to start at login; the PC's sleep setting turned off (or "wake on LAN").
-- Secrets (encryption key, Discogs app key/secret, optional eBay/AI keys) live in a `.env` file next to `docker-compose.yml`, never in the sync folder.
-- Updating: `docker compose pull && docker compose up -d`.
-- Any folder/drive letter works; `D:\33Vinyls` is just an example.
+- Same pattern as Syndic: `compose.yaml` with `build: .`, `restart: unless-stopped`, an `.env` file read at start-up (never baked into the image), and a **named volume** for the live data.
+- First start: the entrypoint creates an empty database in the volume and runs migrations; it never overwrites an existing database, even after a rebuild.
+- Docker Desktop set to start at login; the PC's sleep setting turned off.
+- Updating: `git pull && docker compose up -d --build`.
 
-### 5.6 Syncing data outside the container
+### 5.6 Syncing data outside the container (based on Syndic's approach)
 
-The **live database stays inside a Docker volume**. Putting a live SQLite file directly in a Windows folder that a sync app is copying risks corruption (the file can be copied halfway through a write, and file locking across the Windows ↔ Docker boundary is unreliable). Instead, the app **writes consistent copies** to a normal Windows folder, and any sync app can take it from there:
+33Vinyls reuses what already works in Syndic, and closes the gaps found there.
+
+**Kept from Syndic**
+- Live data stays in a **named Docker volume** (fast, no Windows ↔ Docker file-locking problems).
+- Copies are made with **SQLite's backup API**, so they are consistent even while the app is running.
+- **One-way per run, direction chosen by me:** *container → folder* (export/backup) or *folder → container* (restore). No merging; the target is replaced.
+- **Back up before replacing:** before any restore, the current container database is saved first as `db-before-restore-<date>.sqlite3`.
+- **Same controls:** a **Sync** card in the app's admin page (pick direction, tick the confirmation box, click) and a command-line equivalent (`docker compose exec web python -m vinyls.sync export|restore`).
+- The copies land in **OneDrive** (`D:\OneDrive\Python\33Vinyls\sync`), so the OneDrive client uploads them to the cloud like Syndic's backups.
+
+**Improved over Syndic (its gaps)**
+
+| Syndic gap | 33Vinyls |
+|---|---|
+| Nothing leaves the container until someone runs a sync manually | **Automatic export** nightly (worker) and after bulk-scan sessions, plus the manual button |
+| Uploaded files never copied out | **Photos are exported too**, alongside the database |
+| Sync runs from the local server via `docker compose exec` (needs the PC session) | The container writes directly to the OneDrive folder through a bind mount, so a sync can be started from the phone |
+| Backup files pile up (41 in Syndic) | **Retention:** keep 14 daily + 8 weekly + 12 monthly snapshots; older ones deleted automatically |
+| Two independent databases (local + container) can diverge | **Only one live database** (the container); there is no second local server to keep in step |
+
+**Folder layout**
 
 ```
-D:\33Vinyls\sync\
-├─ db\        33vinyls-2026-11-11.sqlite   – consistent snapshot (last N kept)
-├─ export\    <user>\collection.csv, wantlist.csv, collection.json
-├─ photos\    <user>\…                    – your record photos
-└─ import\    drop a CSV or snapshot here to import / restore
+D:\OneDrive\Python\33Vinyls\sync\
+├─ db\        33vinyls-2026-11-11T0300.sqlite3     – snapshots (with retention)
+│             db-before-restore-<date>.sqlite3      – safety copy taken before a restore
+├─ photos\    <user>\…                              – record photos (mirrored, new/changed files only)
+├─ export\    <user>\collection.csv, wantlist.csv   – readable in Excel without the app
+└─ restore\   put a snapshot here to restore it from the Sync card
 ```
 
-- **When:** nightly, plus after bulk-scan sessions, plus an "Export now" button.
-- **Readable without the app:** CSV/JSON per user, so the collection can be opened in Excel even if the app is gone.
-- **Restore / move:** drop a snapshot into `import\` (or point a fresh install at the folder) to restore everything on another machine.
-- **Sync app:** works with any folder-sync tool, e.g. Syncthing (free, peer-to-peer) to another PC or NAS, or a cloud-drive client (OneDrive, Google Drive) if preferred.
-- **Direction:** export is one-way by default (container → folder) to keep it safe. Changes made outside, such as an edited CSV, are brought back in deliberately through the `import\` folder, with a preview before anything is overwritten.
-- **Privacy:** exports never include Discogs tokens or passwords. Friends' data is exported only for the server owner's backup; it is never shared with other friends unless they opted in.
+- **OneDrive-safe writes:** each file is written under a temporary name and renamed when complete, so OneDrive never uploads a half-written snapshot.
+- **OneDrive "Files On-Demand":** mark the `sync` folder *Always keep on this device*, so a restore never hits a cloud-only placeholder.
+- **Never exported:** the secret key, Discogs tokens, passwords and the `.env` file.
+- **Privacy:** friends' data appears in the snapshots for backup only; it is never shown to other friends unless they opted in.
 
 ### 5.7 Friends' access via Tailscale
 
@@ -257,7 +276,7 @@ The app is **not reachable from the public internet**. Only devices on my Tailsc
 - Correct album identified from the cover photo most of the time; exact pressing when the runout is entered.
 - My full collection is in the app, backed up, and exportable.
 - Running cost: **€0/month** (apart from the electricity for the home server).
-- A copy of my collection is always in the sync folder, readable without the app.
+- A copy of my collection (database, photos, CSV) is always in OneDrive, at most a day old.
 
 ## 8. Risks & mitigations
 
@@ -268,7 +287,8 @@ The app is **not reachable from the public internet**. Only devices on my Tailsc
 | Camera blocked without HTTPS | HTTPS via Tailscale from day one |
 | Friend forgets to switch Tailscale on | App works offline and shows "Can't reach server — is Tailscale on?"; syncs when reconnected |
 | Home server offline (sleep, Windows updates, reboots) | Sleep disabled, containers auto-restart, Docker Desktop starts at login; phones keep working offline and sync later |
-| Sync app copies a half-written database | Live DB stays in a Docker volume; only finished snapshots are written to the sync folder |
+| OneDrive uploads a half-written file | Live DB stays in the Docker volume; snapshots are written under a temporary name and renamed when complete |
+| Docker volume lost (`docker compose down -v`, Docker Desktop reset, WSL disk failure) | Nightly automatic export to OneDrive, so at most one day is lost (less after bulk scans) |
 | A friend's Discogs link expires or is revoked | App shows "Reconnect Discogs"; cached data keeps working meanwhile |
 | Pressing detection is hard | Combine signals, ask guided questions, let users correct |
 
@@ -284,7 +304,8 @@ The app is **not reachable from the public internet**. Only devices on my Tailsc
 | Platform | Installable web app (PWA) for Android + desktop browsers; no Play Store |
 | Hosting | Windows home server, Docker Desktop, Docker Compose |
 | Remote access | Tailscale (HTTPS); friends join my Tailscale network, ideally via machine sharing of the server only; no public link |
-| Data outside the container | Scheduled snapshots + CSV/JSON + photos in a Windows sync folder, picked up by a file-sync app |
+| Data outside the container | Same approach as Syndic (named volume, SQLite backup API, one-way per run, back up before replace), plus nightly automatic export and photos, into the OneDrive folder |
+| Port | 7510 (Syndic uses 7500) |
 | Sharing | Opt-in per person (collection, wantlist, values separately), off by default |
 | Currency | EUR |
 | Discogs | Each friend links their own account (OAuth) |
@@ -293,16 +314,8 @@ The app is **not reachable from the public internet**. Only devices on my Tailsc
 
 ## 11. Open questions
 
-**Sync: follow the Syndic (Syndic_Accounting) app's approach.** Syndic is my own self-hosted app on the same home server (port 7500 on the LAN). 33Vinyls should sync its data outside the container **the same way Syndic does**, so both apps are backed up and synced in one familiar way. 33Vinyls also needs its own port so it doesn't clash with Syndic (e.g. 7510).
-
-Still needed: how Syndic does it. Either give this project access to Syndic's source code, or describe:
-1. Where Syndic's data lives on Windows (folder path) and whether it's a bind mount or a Docker volume.
-2. What gets synced (the live database, export files, or both) and when (continuously, nightly, on a button).
-3. What tool or mechanism moves it (Syndic itself, a script, Windows Task Scheduler, a sync program) and where it goes (another PC, NAS, cloud, phone).
-4. Whether it's one-way (backup) or two-way (changes come back into the app).
-
-Until then, §5.6 stays the default: a consistent snapshot plus CSV/JSON exports written to a Windows folder.
+None blocking. Retention numbers (14 daily / 8 weekly / 12 monthly) and the 03:00 nightly export time can be adjusted in settings.
 
 ---
 
-*Next step: install Docker Desktop and Tailscale on the Windows server, register a Discogs developer app (for the OAuth sign-in), and build the week-1 PWA shell.*
+*Next step: create `D:\OneDrive\Python\33Vinyls\sync` (set to *Always keep on this device*), install Tailscale on the Windows server (Docker Desktop is already running Syndic), register a Discogs developer app (for the OAuth sign-in), and build the week-1 PWA shell.*

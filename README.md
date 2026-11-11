@@ -10,7 +10,7 @@ A private music record **identifier, pressing detector & finder** for price chec
 - Wantlist highlighted while digging in shops
 - Each friend links their own Discogs account; sharing with friends is opt-in
 - Private: friends reach the app through the owner's Tailscale network only
-- Data exported to a Windows folder that any file-sync app can sync
+- Data backed up automatically to OneDrive (same approach as the Syndic app, plus nightly exports and photos)
 
 Audio recognition is on hold.
 

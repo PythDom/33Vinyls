@@ -2,14 +2,14 @@
 
 **A private web app, installable on Android, that identifies a vinyl record, tells you which pressing it is and what it is worth, and keeps your collection and wantlist in one place.**
 
-Status: Draft proposal · v0.5 · 2026-11-11
+Status: Draft proposal · v0.6 · 2026-11-11
 
 > **Project constraints**
 > - **Web app required**, and it **must run on Android** → built as an installable web app (PWA) that runs in Chrome on Android and in any desktop browser.
 > - **Private use:** for me and a few interested friends. **No Google Play release.**
 > - **Free by default:** everything works on free APIs and self-hosting. Paid services are optional plug-ins.
 > - **Hosted on my Windows home server** in Docker containers (Docker Desktop).
-> - **Data syncable outside the container:** a plain Windows folder holds backups and exports, so a file-sync app can copy it elsewhere (see §5.6).
+> - **Data syncable outside the container**, the same way my Syndic app does it (see §5.6 and §11).
 > - **Sharing between friends is opt-in**, off by default.
 > - **Prices in EUR.**
 > - **Each friend links their own Discogs account.**
@@ -293,12 +293,15 @@ The app is **not reachable from the public internet**. Only devices on my Tailsc
 
 ## 11. Open questions
 
-**Which sync app, and what should it do?** "Syndic" didn't match an app I know, so I need a bit more detail. The app will write its copies to a normal Windows folder (`D:\33Vinyls\sync`) in any case. The answers below decide where that folder goes and whether the app needs to watch for files coming back.
+**Sync: follow the Syndic (Syndic_Accounting) app's approach.** Syndic is my own self-hosted app on the same home server (port 7500 on the LAN). 33Vinyls should sync its data outside the container **the same way Syndic does**, so both apps are backed up and synced in one familiar way. 33Vinyls also needs its own port so it doesn't clash with Syndic (e.g. 7510).
 
-1. **App name:** which app is it (e.g. Syncthing, Synology Drive, Resilio Sync, OneDrive, Google Drive, SyncBack)?
-2. **Destination:** where should the copies end up: another PC, a NAS, a USB/external drive, cloud storage, or your phone?
-3. **Purpose:** is it only a **backup** (copies go out), or do you also want to **edit files elsewhere** (e.g. a CSV in Excel on another PC) and have the changes come back into 33Vinyls?
-4. **Folder rules:** can the app sync any folder you choose, or only one fixed folder (as OneDrive does)? If it's fixed, the sync folder will be placed inside it.
+Still needed: how Syndic does it. Either give this project access to Syndic's source code, or describe:
+1. Where Syndic's data lives on Windows (folder path) and whether it's a bind mount or a Docker volume.
+2. What gets synced (the live database, export files, or both) and when (continuously, nightly, on a button).
+3. What tool or mechanism moves it (Syndic itself, a script, Windows Task Scheduler, a sync program) and where it goes (another PC, NAS, cloud, phone).
+4. Whether it's one-way (backup) or two-way (changes come back into the app).
+
+Until then, §5.6 stays the default: a consistent snapshot plus CSV/JSON exports written to a Windows folder.
 
 ---
 

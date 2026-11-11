@@ -2,6 +2,8 @@
 
 A music record **identifier, pressing detector & finder** for price checks and album collection management.
 
+**Platform:** Android (Kotlin + Jetpack Compose, minimum Android 8.0).
+
 - Snap a cover, barcode, label or runout → identify the exact pressing
 - Condition-aware price check with an instant "is it a deal?" verdict
 - Collection with total value, duplicate warnings and offline access

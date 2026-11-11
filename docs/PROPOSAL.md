@@ -1,8 +1,10 @@
 # 33Vinyls — App Proposal
 
-**A mobile app that identifies a vinyl record in seconds, tells you which pressing it is, what it is worth, and keeps your collection and wantlist in one place.**
+**An Android app that identifies a vinyl record in seconds, tells you which pressing it is, what it is worth, and keeps your collection and wantlist in one place.**
 
-Status: Draft proposal · v0.1 · 2026-11-11
+Status: Draft proposal · v0.2 · 2026-11-11
+
+> **Platform requirement:** 33Vinyls **must run on Android**. Android is the launch platform; iOS is optional and only considered after launch (see §5.1).
 
 ---
 
@@ -92,10 +94,10 @@ After the album (master release) is identified, the **Pressing Detector** narrow
 
 ```
 ┌──────────────────────────┐        ┌──────────────────────────────────────┐
-│  Mobile app (iOS/Android)│        │  Backend API                         │
+│  Android app (Kotlin)    │        │  Backend API                         │
 │  - Camera + on-device    │  HTTPS │  - Auth, collection, wantlist        │
 │    crop/OCR/embedding    ├───────►│  - Identification service            │
-│  - Offline DB (SQLite)   │        │    (vector search over cover art)    │
+│  - Offline DB (Room)     │        │    (vector search over cover art)    │
 │  - Sync queue            │        │  - Pressing detector (rules + data)  │
 └──────────────────────────┘        │  - Pricing service (aggregation,     │
                                     │    caching, condition model)         │
@@ -114,13 +116,28 @@ After the album (master release) is identified, the **Pressing Detector** narrow
 
 | Layer | Choice | Why |
 |---|---|---|
-| Mobile | React Native (Expo) *or* Flutter | One codebase, good camera & ML-kit plugins |
-| On-device ML | ML Kit / Vision (OCR, barcode), small image-embedding model (TFLite / Core ML) | Fast and works offline for the first pass |
+| Android app | Kotlin + Jetpack Compose, CameraX | Native camera performance and the best support for Android's on-device ML tools |
+| On-device ML | Google ML Kit (text recognition, barcode scanning) + small image-embedding model on LiteRT (TensorFlow Lite) | Fast, works offline, runs on mid-range phones |
+| Local data | Room (SQLite) + WorkManager for background sync | Offline collection and queued lookups that survive app restarts |
 | Backend | Python (FastAPI) | Strong ML/image ecosystem |
 | Database | PostgreSQL + pgvector | Relational data + cover-art similarity search in one place |
 | Cache / jobs | Redis + worker queue | Rate-limited API calls, price refresh, alerts |
 | Storage | S3-compatible object storage | User photos, cover thumbnails |
-| Audio ID | Platform SDK (e.g. ShazamKit) or Chromaprint/AcoustID | Identify from sound |
+| Audio ID | ShazamKit for Android or Chromaprint/AcoustID | Identify from sound |
+
+### 5.1 Android requirements
+
+| Item | Target |
+|---|---|
+| Minimum Android version | Android 8.0 (API 26), which covers the vast majority of active devices |
+| Target SDK | Latest API level required by Google Play at release time |
+| Devices | Phones first; tablet layout later. Must work well on mid-range phones (3–4 GB RAM), not just flagships |
+| Permissions | Camera (scanning), microphone (Listen mode, only when used), location (shop finder, optional, "while in use" only), notifications (price alerts) |
+| Distribution | Google Play (internal → closed testing → production); signed APK for sideloading during beta if needed |
+| Offline | Full collection, wantlist and last-known prices usable with no connection |
+| Performance budget | Camera ready < 1 s; on-device cover match < 1.5 s on a mid-range phone; APK/AAB < 40 MB (download the ML model on first launch if needed) |
+
+**Why native Kotlin rather than cross-platform:** the app is camera- and ML-heavy, and CameraX + ML Kit give the fastest, most reliable scanning on Android. If iOS is wanted later, business logic (networking, pricing, sync, data models) can be shared via **Kotlin Multiplatform**, with only the UI and camera layer rewritten for iOS.
 
 **Data sources (to validate during discovery)**
 
@@ -139,7 +156,7 @@ After the album (master release) is identified, the **Pressing Detector** narrow
 - Wantlist with in-store highlight
 - Offline collection + cached prices
 
-**Out (post-MVP):** audio identification, price alerts, shop map, eBay pricing, shop mode, social features.
+**Out (post-MVP):** iOS version, audio identification, price alerts, shop map, eBay pricing, shop mode, social features.
 
 ### Milestones
 
@@ -149,7 +166,7 @@ After the album (master release) is identified, the **Pressing Detector** narrow
 | 3–5 | Scan → identify flow; collection CRUD; auth |
 | 6–7 | Pressing detector + runout OCR; price service |
 | 8–9 | Wantlist, offline sync, Discogs import |
-| 10–12 | Beta with ~50 collectors, accuracy tuning, store submission |
+| 10–12 | Closed beta on Google Play with ~50 collectors (testing track), accuracy tuning on a range of devices, Play Store release |
 
 ## 7. Success metrics
 
@@ -178,11 +195,10 @@ After the album (master release) is identified, the **Pressing Detector** narrow
 
 ## 10. Open questions
 
-1. Platform priority: iOS first, Android first, or both via cross-platform from day one?
-2. Is Discogs account linking required, or optional for users who don't use Discogs?
-3. Which markets/currencies at launch?
-4. Do we want a web companion for bulk collection editing in the MVP?
-5. Budget for third-party audio-ID SDK vs. open-source fingerprinting?
+1. Is Discogs account linking required, or optional for users who don't use Discogs?
+2. Which markets/currencies at launch?
+3. Do we want a web companion for bulk collection editing in the MVP?
+4. Budget for third-party audio-ID SDK vs. open-source fingerprinting?
 
 ---
 

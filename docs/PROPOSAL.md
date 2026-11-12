@@ -2,7 +2,7 @@
 
 **A private web app, installable on Android, that identifies a vinyl record, tells you which pressing it is and what it is worth, and keeps your collection and wantlist in one place.**
 
-Status: Draft proposal · v0.7 · 2026-11-11
+Status: Draft proposal · v0.8 · 2026-11-12
 
 > **Project constraints**
 > - **Web app required**, and it **must run on Android** → built as an installable web app (PWA) that runs in Chrome on Android and in any desktop browser.
@@ -183,7 +183,7 @@ Windows home server
 │       └─ worker   – price cache refresh, scheduled sync, price watch
 │       volumes:
 │       ├─ 33vinyls-data → /data      named volume: live SQLite DB, photos, secret key
-│       └─ D:\OneDrive\Python\33Vinyls\sync → /sync   bind mount: copies only
+│       └─ .\Sync → /sync   bind mount (D:\OneDrive\Python\33Vinyls\Sync): copies only
 ├─ Tailscale (Windows app) → https://<server>.<tailnet>.ts.net → localhost:7510
 └─ OneDrive client → uploads the sync folder to the cloud continuously
 ```
@@ -191,7 +191,28 @@ Windows home server
 - Same pattern as Syndic: `compose.yaml` with `build: .`, `restart: unless-stopped`, an `.env` file read at start-up (never baked into the image), and a **named volume** for the live data.
 - First start: the entrypoint creates an empty database in the volume and runs migrations; it never overwrites an existing database, even after a rebuild.
 - Docker Desktop set to start at login; the PC's sleep setting turned off.
-- Updating: `git pull && docker compose up -d --build`.
+- Updating: `git pull && docker compose up -d --build`, run in `D:\OneDrive\Python\33Vinyls`.
+
+### 5.5.1 Code location and GitHub
+
+The code lives in **`D:\OneDrive\Python\33Vinyls`** and is a clone of the GitHub repository `PythDom/33Vinyls`. The `Sync` folder sits inside it but is **never committed** (it holds personal data and the repository is public).
+
+```
+D:\OneDrive\Python\33Vinyls\        ← git working copy (synced with GitHub)
+├─ .git\
+├─ .gitignore          ← excludes Sync\, .env, databases, build output
+├─ .gitattributes      ← keeps shell scripts in Linux line endings for Docker
+├─ compose.yaml        ← bind mount "./Sync:/sync"
+├─ .env                ← secrets, local only, never committed
+├─ app\ …              ← source code
+├─ docs\PROPOSAL.md
+└─ Sync\               ← data copies, local + OneDrive only, never committed
+```
+
+- **Two different syncs, two different jobs:** GitHub holds the **code** (pushed and pulled with git); OneDrive holds the **data copies** in `Sync\` (and, as a side effect, also uploads the code folder).
+- **Dependencies stay inside Docker:** packages (Python, Node) are installed only while the Docker image builds, so there are no huge `node_modules` / `.venv` folders on the PC for OneDrive to upload.
+- **Git inside OneDrive:** works fine for one PC. Avoid editing the same working copy from two PCs at once through OneDrive (that can corrupt `.git`); on another PC, clone from GitHub instead. If OneDrive locks a file during `git pull`, pause OneDrive syncing for a moment and retry.
+- **Line endings:** `.gitattributes` forces Linux line endings for `*.sh` and `Dockerfile`, so Git on Windows doesn't break the container's start-up script.
 
 ### 5.6 Syncing data outside the container (based on Syndic's approach)
 
@@ -203,7 +224,7 @@ Windows home server
 - **One-way per run, direction chosen by me:** *container → folder* (export/backup) or *folder → container* (restore). No merging; the target is replaced.
 - **Back up before replacing:** before any restore, the current container database is saved first as `db-before-restore-<date>.sqlite3`.
 - **Same controls:** a **Sync** card in the app's admin page (pick direction, tick the confirmation box, click) and a command-line equivalent (`docker compose exec web python -m vinyls.sync export|restore`).
-- The copies land in **OneDrive** (`D:\OneDrive\Python\33Vinyls\sync`), so the OneDrive client uploads them to the cloud like Syndic's backups.
+- The copies land in **OneDrive** (`D:\OneDrive\Python\33Vinyls\Sync`), so the OneDrive client uploads them to the cloud like Syndic's backups.
 
 **Improved over Syndic (its gaps)**
 
@@ -218,7 +239,7 @@ Windows home server
 **Folder layout**
 
 ```
-D:\OneDrive\Python\33Vinyls\sync\
+D:\OneDrive\Python\33Vinyls\Sync\
 ├─ db\        33vinyls-2026-11-11T0300.sqlite3     – snapshots (with retention)
 │             db-before-restore-<date>.sqlite3      – safety copy taken before a restore
 ├─ photos\    <user>\…                              – record photos (mirrored, new/changed files only)
@@ -227,7 +248,7 @@ D:\OneDrive\Python\33Vinyls\sync\
 ```
 
 - **OneDrive-safe writes:** each file is written under a temporary name and renamed when complete, so OneDrive never uploads a half-written snapshot.
-- **OneDrive "Files On-Demand":** mark the `sync` folder *Always keep on this device*, so a restore never hits a cloud-only placeholder.
+- **OneDrive "Files On-Demand":** mark the `Sync` folder *Always keep on this device*, so a restore never hits a cloud-only placeholder.
 - **Never exported:** the secret key, Discogs tokens, passwords and the `.env` file.
 - **Privacy:** friends' data appears in the snapshots for backup only; it is never shown to other friends unless they opted in.
 
@@ -306,6 +327,7 @@ The app is **not reachable from the public internet**. Only devices on my Tailsc
 | Remote access | Tailscale (HTTPS); friends join my Tailscale network, ideally via machine sharing of the server only; no public link |
 | Data outside the container | Same approach as Syndic (named volume, SQLite backup API, one-way per run, back up before replace), plus nightly automatic export and photos, into the OneDrive folder |
 | Port | 7510 (Syndic uses 7500) |
+| Code location | `D:\OneDrive\Python\33Vinyls`, a git clone of `PythDom/33Vinyls`; `Sync\` inside it, ignored by git |
 | Sharing | Opt-in per person (collection, wantlist, values separately), off by default |
 | Currency | EUR |
 | Discogs | Each friend links their own account (OAuth) |
@@ -318,4 +340,4 @@ None blocking. Retention numbers (14 daily / 8 weekly / 12 monthly) and the 03:0
 
 ---
 
-*Next step: create `D:\OneDrive\Python\33Vinyls\sync` (set to *Always keep on this device*), install Tailscale on the Windows server (Docker Desktop is already running Syndic), register a Discogs developer app (for the OAuth sign-in), and build the week-1 PWA shell.*
+*Next step: link `D:\OneDrive\Python\33Vinyls` to GitHub (see README), set `Sync` to *Always keep on this device*, install Tailscale on the Windows server (Docker Desktop is already running Syndic), register a Discogs developer app (for the OAuth sign-in), and build the week-1 PWA shell.*

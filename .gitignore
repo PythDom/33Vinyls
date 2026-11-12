@@ -1,0 +1,34 @@
+# Data copies (database snapshots, photos, CSV exports): local + OneDrive only, never on GitHub
+/Sync/
+/sync/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Databases and local data
+*.sqlite3
+*.sqlite
+*.db
+/data/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.vite/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

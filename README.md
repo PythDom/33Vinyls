@@ -15,3 +15,19 @@ A private music record **identifier, pressing detector & finder** for price chec
 Audio recognition is on hold.
 
 See the full app proposal: [docs/PROPOSAL.md](docs/PROPOSAL.md)
+
+## Local setup (Windows home server)
+
+Code lives in `D:\OneDrive\Python\33Vinyls` and syncs with GitHub. The `Sync` folder inside it holds data copies and is ignored by git.
+
+The folder already exists (it contains `Sync`), so link it to GitHub instead of cloning. In PowerShell:
+
+```powershell
+cd D:\OneDrive\Python\33Vinyls
+git init
+git remote add origin https://github.com/PythDom/33Vinyls.git
+git fetch origin
+git checkout -t origin/ccr-20812b22-pvid4b   # or: git checkout -t origin/main once merged
+```
+
+Afterwards: `git pull` to get updates, `git status` should never list anything under `Sync\`.

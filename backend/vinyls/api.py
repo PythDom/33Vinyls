@@ -103,30 +103,49 @@ async def by_photo(photo: UploadFile = File(...), mode: str = Form("cover"), use
         raise HTTPException(400, "mode must be cover, label or runout")
     data = await _read_upload(photo)
     try:
-        text = await asyncio.to_thread(identify.ocr, data, mode)
+        read = await asyncio.to_thread(identify.read_photo, data, mode)
     except Exception as exc:
         raise HTTPException(500, f"Text recognition failed: {exc}") from exc
-    lines = identify.clean_lines(text)
+    lines = [l.text for l in read.lines]
+    words = read.words()
     if mode == "runout":
-        return {"text": text, "lines": lines, "candidates": []}
+        return {"text": read.text, "lines": lines, "words": words, "candidates": []}
     creds = _creds(user)
-    catnos = identify.catalogue_numbers(text)
-    query = identify.query_from_text(text)
-    results: list[dict[str, Any]] = []
-    for catno in catnos:
-        results += await _call(discogs.search(creds, catno=catno))
-    if query:
-        results += await _call(discogs.search(creds, q=query))
-    candidates = _summaries(results)[:15]
+    queries = identify.plan_queries(read)
+    found: dict[int, dict[str, Any]] = {}
+    hits: dict[int, int] = {}
+    tried = []
+    for kind, value in queries:
+        params = {"catno": value} if kind == "catno" else {"q": value}
+        results = await _call(discogs.search(creds, **params))
+        tried.append({"kind": kind, "value": value, "results": len(results)})
+        for c in _summaries(results):
+            found.setdefault(c["id"], c)
+            hits[c["id"]] = hits.get(c["id"], 0) + 1
+        if len(found) >= 40:
+            break
+    read_words = {identify.fold(w) for line in lines for w in line.split()} | {identify.fold(c) for c in identify.catalogue_numbers(read.text)}
+    candidates = list(found.values())
+    for c in candidates:
+        c["text_score"] = identify.text_match_score(c, read_words)
+        c["hits"] = hits[c["id"]]
+    candidates.sort(key=lambda c: (-(c["text_score"] + 0.15 * c["hits"])))
+    candidates = candidates[:15]
     if mode == "cover" and candidates:
         photo_img = identify.load_image(data, 600)
+        best_text = candidates[0]["text_score"]
         scores: dict[int, float] = {}
-        for c in candidates[:10]:
+        for c in candidates[:8]:
+            if c["text_score"] < best_text - 0.34:
+                continue  # only compare covers among the good text matches
             thumb = await catalog.thumb(creds, c["id"])
             if thumb:
                 scores[c["id"]] = identify.cover_similarity(photo_img, thumb)
-        candidates = identify.rerank(candidates, scores)
-    return {"text": text, "lines": lines, "query": query, "catnos": catnos, "candidates": _with_owned(user, candidates)}
+        for c in candidates:
+            if c["id"] in scores:
+                c["image_score"] = scores[c["id"]]
+        candidates.sort(key=lambda c: -(c["text_score"] + 0.15 * c["hits"] + 0.5 * c.get("image_score", 0)))
+    return {"text": read.text, "lines": lines, "words": words, "tried": tried, "candidates": _with_owned(user, candidates)}
 
 
 @router.get("/releases/{release_id}")

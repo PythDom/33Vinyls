@@ -194,3 +194,4 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 @media (max-width: 380px) {
   .grid2, .filters { grid-template-columns: 1fr; }
 }
+.scroll-anchor { scroll-margin-top: 64px; }

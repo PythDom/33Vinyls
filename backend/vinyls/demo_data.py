@@ -174,8 +174,8 @@ def search(q: str = "", barcode: str = "", catno: str = "", artist: str = "", re
         haystack = _fold(" ".join([r["artists"][0]["name"], r["title"], r["labels"][0]["name"], r["labels"][0]["catno"], r["country"], str(r["year"])]))
         hay_compact = haystack.replace(" ", "")
         if q_tokens:
-            hits = sum(1 for t in q_tokens if t in haystack.split() or (len(t) > 3 and t in hay_compact))
-            if hits < max(1, (len(q_tokens) + 1) // 2):
+            # like Discogs: every word of the query must match
+            if not all(t in haystack.split() or (len(t) > 3 and t in hay_compact) for t in q_tokens):
                 continue
         if barcode and _digits(barcode) not in [_digits(i["value"]) for i in r["identifiers"] if i["type"] == "Barcode"]:
             continue

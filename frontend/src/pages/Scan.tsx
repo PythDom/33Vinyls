@@ -28,7 +28,12 @@ export default function Scan() {
   const [code, setCode] = useState("");
   const [manual, setManual] = useState("");
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
-  const [ocr, setOcr] = useState<{ query?: string; lines: string[] } | null>(null);
+  const [ocr, setOcr] = useState<{ words: string[]; tried: { kind: string; value: string; results: number }[] } | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (candidates || ocr || code) resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [candidates, ocr, code]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -104,9 +109,10 @@ export default function Scan() {
         else await lookup(r.codes[0]);
       } else {
         setBusy(mode === "cover" ? "Reading the cover…" : "Reading the label…");
-        const r = await upload<{ candidates: Candidate[]; query?: string; lines: string[] }>("/api/identify/photo", blob, { mode });
+        const r = await upload<{ candidates: Candidate[]; words: string[]; tried: { kind: string; value: string; results: number }[] }>("/api/identify/photo", blob, { mode });
         setCandidates(r.candidates);
-        setOcr({ query: r.query, lines: r.lines });
+        setOcr({ words: r.words ?? [], tried: r.tried ?? [] });
+        setPicked([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
@@ -159,6 +165,7 @@ export default function Scan() {
         <p className="muted small">For the exact pressing, pick the album first, then use “Which pressing?” and the runout.</p>
       </Section>
 
+      <div ref={resultsRef} className="scroll-anchor" />
       {busy && <p className="busy" aria-live="polite">{busy}</p>}
       <ErrorNote error={error} />
 
@@ -185,17 +192,37 @@ export default function Scan() {
         </Section>
       )}
 
-      {ocr && (
-        <p className="muted small">
-          Read from photo: <em>{ocr.lines.slice(0, 6).join(" / ") || "nothing readable"}</em>
-        </p>
-      )}
       {candidates && (
         <Section title="Matches on Discogs">
-          <CandidateList candidates={candidates} empty="No match found. Try the text search with what you can read on the cover." />
-          <button className="link" onClick={() => go(`/find${ocr?.query ? `?q=${encodeURIComponent(ocr.query)}` : ""}`)}>Search by text instead</button>
+          <CandidateList candidates={candidates} empty="No match found from the photo. Pick the right words below, or search by text." />
         </Section>
       )}
+      {ocr && (
+        <Section title="Words read on the photo">
+          {ocr.words.length ? (
+            <>
+              <p className="muted small">Tap the artist or title words (spelling can be fixed on the next screen), then search.</p>
+              <div className="options">
+                {ocr.words.map((w) => (
+                  <button key={w} className={picked.includes(w) ? "chip active" : "chip"} aria-pressed={picked.includes(w)}
+                    onClick={() => setPicked(picked.includes(w) ? picked.filter((p) => p !== w) : [...picked, w])}>
+                    {w}
+                  </button>
+                ))}
+              </div>
+              <button className="primary" disabled={!picked.length} onClick={() => go(`/find?q=${encodeURIComponent(picked.join(" "))}`)}>
+                Search with {picked.length || "selected"} word{picked.length === 1 ? "" : "s"}
+              </button>
+            </>
+          ) : (
+            <p className="muted">Nothing readable. Try again closer, with even light and no glare, or use the barcode or text search.</p>
+          )}
+          {ocr.tried.length > 0 && (
+            <p className="muted small">Searched Discogs for: {ocr.tried.map((t) => `“${t.value}” (${t.results})`).join(", ")}</p>
+          )}
+        </Section>
+      )}
+      {(candidates || ocr) && <button className="link" onClick={() => go("/find")}>Search by text instead</button>}
     </main>
   );
 }

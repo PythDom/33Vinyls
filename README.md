@@ -27,7 +27,7 @@ cd D:\OneDrive\Python\33Vinyls
 git init
 git remote add origin https://github.com/PythDom/33Vinyls.git
 git fetch origin
-git checkout -t origin/ccr-20812b22-pvid4b   # or: git checkout -t origin/main once merged
+git checkout -t origin/main
 ```
 
 Afterwards: `git pull` to get updates, `git status` should never list anything under `Sync\`.

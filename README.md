@@ -6,7 +6,7 @@ A private music record **identifier, pressing detector & finder** for price chec
 
 - Scan a barcode, cover, label or runout → identify the exact pressing
 - Condition-aware price check with a quick "is it a deal?" verdict
-- Collection with total value, duplicate warnings and offline access
+- Collection searchable and browsable fully offline on the phone, with total value and duplicate warnings
 - Wantlist highlighted while digging in shops
 - Each friend links their own Discogs account; sharing with friends is opt-in
 - Private: friends reach the app through the owner's Tailscale network only

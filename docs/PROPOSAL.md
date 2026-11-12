@@ -2,12 +2,13 @@
 
 **A private web app, installable on Android, that identifies a vinyl record, tells you which pressing it is and what it is worth, and keeps your collection and wantlist in one place.**
 
-Status: Draft proposal · v0.8 · 2026-11-12
+Status: Draft proposal · v0.9 · 2026-11-12
 
 > **Project constraints**
 > - **Web app required**, and it **must run on Android** → built as an installable web app (PWA) that runs in Chrome on Android and in any desktop browser.
 > - **Private use:** for me and a few interested friends. **No Google Play release.**
 > - **Free by default:** everything works on free APIs and self-hosting. Paid services are optional plug-ins.
+> - **Final objective (must-haves):** (1) the app runs on **Android smartphones**; (2) each user's **collection can be searched and browsed fully offline**. See §3.6 for the acceptance tests.
 > - **Hosted on my Windows home server** in Docker containers (Docker Desktop).
 > - **Data synced outside the container to OneDrive**, using the same approach as my Syndic app, with automatic exports added (see §5.6).
 > - **Sharing between friends is opt-in**, off by default.
@@ -73,7 +74,7 @@ A small, invite-only group: me plus a handful of friends. Each person has their 
 - **Duplicate warning** when scanning something already owned.
 - **Discogs link:** each friend connects their own Discogs account once (Discogs sign-in, no password shared with the app). Their Discogs collection and wantlist are imported, and records added in 33Vinyls can optionally be pushed back to Discogs.
 - **CSV import/export**, so the data is never locked in.
-- **Offline:** collection, wantlist and cached prices are stored on the device and sync when back online.
+- **Offline:** the whole collection can be searched and browsed with no connection (see §3.6).
 
 ### 3.5 Wantlist & finder
 
@@ -88,6 +89,47 @@ A small, invite-only group: me plus a handful of friends. Each person has their 
   - hide individual records
   
   When both sides share, scans show "Alex owns this" / "Sam wants this", which helps with swaps. Sharing can be turned off at any time and takes effect immediately.
+
+### 3.6 Offline-first collection (must-have)
+
+The phone keeps a **complete local copy** of the user's own collection and wantlist. The app always reads from this local copy first; the server is only used to sync changes and fetch new data. Losing the connection never blocks search or browsing.
+
+**What is stored on the phone (per user)**
+
+| Data | Stored offline | Size estimate (2,000 records) |
+|---|---|---|
+| Collection + wantlist records (artist, title, label, cat#, year, country, format, matrix, grade, notes, location, purchase info) | All of it | ~5 MB |
+| Cover thumbnails (~300 px JPEG/WebP) | All of them | ~30–40 MB |
+| Last-known prices (EUR) | All of them, with date | < 1 MB |
+| Full-size photos taken by the user | Only the most recent / pinned ones | optional |
+| Friends' shared collections (opt-in) | Optional setting, off by default | — |
+
+**What works offline**
+- Open the installed app from the home screen without any connection (app shell cached by a service worker).
+- **Search** as you type: artist, title, label, catalogue number, barcode, matrix/runout text, notes, storage location; tolerant of accents and small typos. Done on the phone with a local search index (e.g. MiniSearch), never on the server.
+- **Browse, filter and sort:** by artist, label, genre, year, decade, country, format, grade, location, date added, value.
+- Open a record's detail page with cover, details, notes and last-known price (shown with its date).
+- **Scan a barcode** and check it against my **own collection and wantlist** ("You own this" / "On your wantlist").
+- Add or edit records and notes: saved locally and queued, then synced automatically when back online.
+
+**Needs a connection (server reachable via Tailscale)**
+- Identifying a record that is not in my collection (Discogs lookups), fresh prices, OCR-to-Discogs search, Discogs import, sharing with friends.
+
+**How it is guaranteed**
+- **First sync downloads everything:** on first login the full collection, wantlist and thumbnails are downloaded; afterwards only changes are synced. The app shows "Offline ready ✓ — 1,234 records, synced 5 min ago".
+- **Persistent storage:** the app requests persistent storage (`navigator.storage.persist()`), which Chrome grants to installed apps, so Android does not clear the data when space is low. Status shown in Settings.
+- **Fixed address:** the offline data belongs to the app's web address, so the Tailscale address is fixed once and never changed (changing it would mean a new download).
+- **No hanging:** when the server can't be reached (no signal, Tailscale off, server down), requests time out quickly and the app keeps running from local data.
+- **Safe to lose:** the phone copy is a cache. If the app or Chrome data is wiped, everything is downloaded again from the server; unsynced edits are the only risk, so the app warns when edits are waiting to sync.
+
+**Acceptance tests (on a real Android phone)**
+1. Install the app, sign in, wait for "Offline ready".
+2. Turn on **airplane mode**, close the app, reopen it from the home screen → it opens.
+3. Search by artist, by catalogue number and with a typo → correct results in under 0.5 s with 2,000 records.
+4. Browse by artist and by storage location, filter by decade, open 10 records → covers and details shown.
+5. Scan the barcode of an owned record → "You own this".
+6. Edit a note offline, reconnect → change appears on the server and in the next OneDrive export.
+7. Repeat 2–4 on the oldest friend's phone (minimum Android 8 with current Chrome).
 
 ## 4. Key flows
 
@@ -140,7 +182,8 @@ Trade-off: camera control and scanning speed are a little below a native app. Th
 | Layer | Choice | Why |
 |---|---|---|
 | Frontend | TypeScript + React (or SvelteKit), Vite, `vite-plugin-pwa` | Mature PWA tooling, works well on Android Chrome |
-| Offline storage | IndexedDB via Dexie | Collection usable with no signal |
+| Offline storage | IndexedDB via Dexie, persistent storage requested; service worker (Workbox) for the app shell and thumbnails | Whole collection usable with no signal |
+| Offline search | MiniSearch (or FlexSearch) index built on the phone | Instant search as you type, no server needed |
 | Barcode | Browser BarcodeDetector API, ZXing-js fallback | Fast on Android Chrome |
 | OCR | Tesseract.js (in browser) | Free, offline; runout text needs manual correction anyway |
 | Cover re-ranking | Small image-embedding model (e.g. CLIP via ONNX Runtime) on the backend | Compares the photo with a handful of candidate covers only |
@@ -286,13 +329,14 @@ The app is **not reachable from the public internet**. Only devices on my Tailsc
 | Weeks | Deliverable |
 |---|---|
 | 1 | Docker Compose on the Windows server, Tailscale HTTPS, share the server with one friend and test the address from their phone, PWA shell installable on Android, Discogs app registration + OAuth sign-in test, data model |
-| 2–3 | Barcode + text search → release page → add to collection; accounts and invites |
+| 2–3 | **Offline-first core:** local database on the phone, full first sync + change sync, offline search/browse, airplane-mode test; then barcode + text search → release page → add to collection; accounts and invites |
 | 4–5 | Cover-photo and label OCR identification, pressing picker, runout entry, price card |
-| 6 | Wantlist, offline store + sync, Discogs collection/wantlist import, sync-folder exports + restore, sharing settings |
-| 7–8 | Testing on my phone and friends' Android phones, fixes, backups, short how-to-install guide |
+| 6 | Wantlist (offline too), Discogs collection/wantlist import, sync-folder exports + restore, sharing settings |
+| 7–8 | Run the §3.6 acceptance tests on my phone and friends' Android phones, fixes, backups, short how-to-install guide |
 
 ## 7. What "good" looks like
 
+- With the phone in **airplane mode**, I can open the app, search and browse my whole collection (§3.6 tests pass).
 - I can get from opening the app to a price in about **10 seconds** for a record with a barcode, and **under 30 seconds** with a runout check.
 - Correct album identified from the cover photo most of the time; exact pressing when the runout is entered.
 - My full collection is in the app, backed up, and exportable.
@@ -307,6 +351,8 @@ The app is **not reachable from the public internet**. Only devices on my Tailsc
 | Browser OCR struggles with covers/runouts | Quick manual correction; optional AI plug-in for hard cases |
 | Camera blocked without HTTPS | HTTPS via Tailscale from day one |
 | Friend forgets to switch Tailscale on | App works offline and shows "Can't reach server — is Tailscale on?"; syncs when reconnected |
+| Android clears the app's data when storage is low | Persistent storage requested and shown in Settings; full re-download from the server if it happens anyway |
+| Offline data lost if the app's address changes | Tailscale address fixed once and never changed |
 | Home server offline (sleep, Windows updates, reboots) | Sleep disabled, containers auto-restart, Docker Desktop starts at login; phones keep working offline and sync later |
 | OneDrive uploads a half-written file | Live DB stays in the Docker volume; snapshots are written under a temporary name and renamed when complete |
 | Docker volume lost (`docker compose down -v`, Docker Desktop reset, WSL disk failure) | Nightly automatic export to OneDrive, so at most one day is lost (less after bulk scans) |
@@ -323,6 +369,7 @@ The app is **not reachable from the public internet**. Only devices on my Tailsc
 | Topic | Decision |
 |---|---|
 | Platform | Installable web app (PWA) for Android + desktop browsers; no Play Store |
+| Offline | Offline-first: full collection + wantlist + thumbnails on the phone; search and browse with no connection |
 | Hosting | Windows home server, Docker Desktop, Docker Compose |
 | Remote access | Tailscale (HTTPS); friends join my Tailscale network, ideally via machine sharing of the server only; no public link |
 | Data outside the container | Same approach as Syndic (named volume, SQLite backup API, one-way per run, back up before replace), plus nightly automatic export and photos, into the OneDrive folder |

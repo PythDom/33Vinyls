@@ -72,3 +72,49 @@ def test_runout_ocr_returns_text(admin):
     img.save(buf, "PNG")
     r = admin.post("/api/identify/photo", data={"mode": "runout"}, files={"photo": ("r.png", buf.getvalue(), "image/png")})
     assert "2001" in r.json()["text"]
+
+
+# ---------------------------------------------------------------- reading v2: several searches, curved labels
+
+from vinyls.identify import PhotoText, ReadLine, plan_queries  # noqa: E402
+
+
+def test_plan_queries_uses_small_searches():
+    read = PhotoText([ReadLine("KESTREL UNION", 94, "x"), ReadLine("Paper Satellites", 96, "x"), ReadLine("Xq7 GadVd", 60, "x"), ReadLine("NGLP 9", 90, "x")])
+    queries = plan_queries(read)
+    assert ("catno", "NGLP 9") in queries
+    assert ("q", "KESTREL UNION") in queries and ("q", "Paper Satellites") in queries
+    assert all("GadVd" not in v for _, v in queries)
+
+
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="tesseract not installed")
+@pytest.mark.parametrize("rotation", [0, 70, 200])
+def test_curved_label_text_is_read(rotation):
+    from tests.label_image import label_png
+    data, _ = label_png(rot=rotation)
+    words = {w.upper() for w in identify.read_photo(data, "label").words()}
+    assert {"KESTREL", "UNION", "PAPER", "SATELLITES"} <= words
+
+
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="tesseract not installed")
+def test_label_photo_finds_record_despite_junk(admin):
+    from tests.label_image import label_png
+    data, _ = label_png(rot=70)
+    body = admin.post("/api/identify/photo", data={"mode": "label"}, files={"photo": ("l.jpg", data, "image/jpeg")}).json()
+    assert body["candidates"], body
+    assert body["candidates"][0]["title"] == "Paper Satellites"
+    assert len(body["tried"]) >= 2 and body["words"]
+
+
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="tesseract not installed")
+def test_one_misread_word_no_longer_means_zero_results(admin):
+    img = Image.new("RGB", (800, 500), (250, 250, 250))
+    d = ImageDraw.Draw(img)
+    font = ImageFont.load_default(size=48)
+    d.text((40, 60), "MARISOL OKAFOR", fill=(0, 0, 0), font=font)
+    d.text((40, 180), "Tidal Rooms", fill=(0, 0, 0), font=font)
+    d.text((40, 300), "Zubrowka Qwyxt", fill=(0, 0, 0), font=font)  # words on no record at all
+    buf = io.BytesIO()
+    img.save(buf, "JPEG")
+    body = admin.post("/api/identify/photo", data={"mode": "cover"}, files={"photo": ("c.jpg", buf.getvalue(), "image/jpeg")}).json()
+    assert body["candidates"] and body["candidates"][0]["title"] == "Tidal Rooms"

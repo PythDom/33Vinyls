@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from . import catalog, db, discogs, identify, pressing, prices
+from . import catalog, db, discogs, identify, pressing, prices, sharing
 from .auth import current_user
 
 router = APIRouter(prefix="/api")
@@ -54,9 +54,12 @@ def _owned(user_id: int, release_ids: list[int]) -> dict[int, list[str]]:
 
 
 def _with_owned(user: dict, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    owned = _owned(user["id"], [c["id"] for c in candidates])
+    ids = [c["id"] for c in candidates]
+    owned = _owned(user["id"], ids)
+    friends = sharing.friends_with(user["id"], ids)
     for c in candidates:
         c["owned"] = owned.get(c["id"], [])
+        c["friends"] = friends.get(c["id"], [])
     return candidates
 
 
@@ -151,7 +154,8 @@ async def by_photo(photo: UploadFile = File(...), mode: str = Form("cover"), use
 @router.get("/releases/{release_id}")
 async def release(release_id: int, user: dict = Depends(current_user)) -> dict[str, Any]:
     data = await _call(catalog.get_release(_creds(user), release_id))
-    return {**data, "owned": _owned(user["id"], [release_id]).get(release_id, [])}
+    return {**data, "owned": _owned(user["id"], [release_id]).get(release_id, []),
+            "friends": sharing.friends_with(user["id"], [release_id]).get(release_id, [])}
 
 
 @router.get("/masters/{master_id}/versions")

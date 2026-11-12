@@ -48,3 +48,15 @@ def test_unknown_fields_dropped(admin):
     a = op(100101, notes="ok", is_admin=True)
     admin.post("/api/sync", json={"ops": [a]})
     assert admin.get("/api/sync?since=0").json()["items"][0]["fields"] == {"notes": "ok"}
+
+
+def test_price_and_release_updates_reach_the_phone(admin):
+    admin.post("/api/sync", json={"ops": [op(100101)]})
+    cursor = admin.get("/api/sync?since=0").json()["cursor"]
+    assert admin.get(f"/api/sync?since={cursor}").json()["prices"] == []
+    admin.get("/api/releases/100101/price")  # server refreshes the price
+    nxt = admin.get(f"/api/sync?since={cursor}").json()
+    assert [p["release_id"] for p in nxt["prices"]] == [100101]
+    assert nxt["items"] == [] and nxt["cursor"] > cursor
+    # another user's records don't leak in
+    assert admin.get(f"/api/sync?since={nxt['cursor']}").json()["prices"] == []

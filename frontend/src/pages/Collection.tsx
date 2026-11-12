@@ -32,6 +32,20 @@ export default function Collection() {
     return query.trim() ? filtered : sortRows(filtered, sort);
   }, [rows, index, query, filters, sort]);
   const total = useMemo(() => visible.reduce((s, r) => s + (r.value ?? 0), 0), [visible]);
+  const money = useMemo(() => {
+    const coll = rows.filter((r) => r.item.kind === "collection");
+    const valued = coll.filter((r) => r.value != null);
+    const paid = coll.reduce((s, r) => s + (r.item.fields.purchase_price ?? 0), 0);
+    const both = coll.filter((r) => r.value != null && r.item.fields.purchase_price != null);
+    return {
+      value: valued.reduce((s, r) => s + (r.value ?? 0), 0),
+      valued: valued.length,
+      count: coll.length,
+      paid,
+      gain: both.reduce((s, r) => s + (r.value ?? 0) - (r.item.fields.purchase_price ?? 0), 0),
+      hasPaid: both.length > 0,
+    };
+  }, [rows]);
   const activeFilters = Object.entries(filters).filter(([k, v]) => k !== "kind" && v).length;
 
   const setKind = (kind: Kind) => {
@@ -99,6 +113,16 @@ export default function Collection() {
             </button>
           )}
         </div>
+      )}
+      {filters.kind === "collection" && !query.trim() && activeFilters === 0 && money.count > 0 && (
+        <div className="stats" aria-label="Collection value">
+          <div><span className="muted small">Est. value</span><strong>{eur(money.value)}</strong></div>
+          <div><span className="muted small">Paid</span><strong>{money.hasPaid ? eur(money.paid) : "—"}</strong></div>
+          <div><span className="muted small">Gain</span><strong className={money.gain >= 0 ? "gain-pos" : "gain-neg"}>{money.hasPaid ? eur(money.gain) : "—"}</strong></div>
+        </div>
+      )}
+      {filters.kind === "collection" && money.count > 0 && money.valued < money.count && !query.trim() && activeFilters === 0 && (
+        <p className="muted small">{money.count - money.valued} records have no price yet: prices are filled in automatically in the background.</p>
       )}
       <p className="muted small summary">
         {visible.length} record{visible.length === 1 ? "" : "s"}

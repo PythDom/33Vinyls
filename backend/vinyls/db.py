@@ -74,7 +74,30 @@ MIGRATIONS: list[str] = [
     CREATE TABLE counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);
     INSERT INTO counters(name, value) VALUES ('seq', 0);
     """,
+    # 2 — week 6: sharing settings, change sequence on releases/prices (so updates reach phones), key/value state
+    """
+    ALTER TABLE users ADD COLUMN share_collection INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN share_wantlist INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN share_values INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE releases ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE releases ADD COLUMN complete INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE prices ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX releases_seq ON releases(seq);
+    CREATE INDEX prices_seq ON prices(seq);
+    CREATE INDEX items_release ON items(release_id);
+    CREATE TABLE state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    """,
 ]
+
+
+def get_state(key: str, default: str | None = None) -> str | None:
+    row = connect().execute("SELECT value FROM state WHERE key=?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def set_state(key: str, value: Any) -> None:
+    connect().execute("INSERT INTO state(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                      (key, str(value)))
 
 
 def now() -> str:

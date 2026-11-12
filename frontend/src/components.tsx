@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { db } from "./db";
 import { go, useLive } from "./hooks";
-import type { Candidate, PriceCard } from "./types";
+import type { Candidate, FriendMark, PriceCard } from "./types";
 import { GRADES } from "./types";
 
 export const eur = (v: number | null | undefined) =>
@@ -41,6 +41,19 @@ export function OwnedBadges({ owned }: { owned?: string[] }) {
   );
 }
 
+export function FriendBadges({ friends }: { friends?: FriendMark[] }) {
+  if (!friends?.length) return null;
+  return (
+    <span className="badges">
+      {friends.map((f) => (
+        <span key={f.name + f.kind} className="badge friend">
+          {f.name} {f.kind === "want" ? "wants this" : "has this"}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export function CandidateList({ candidates, empty }: { candidates: Candidate[]; empty?: string }) {
   if (!candidates.length) return <p className="muted">{empty ?? "No matches."}</p>;
   return (
@@ -56,6 +69,7 @@ export function CandidateList({ candidates, empty }: { candidates: Candidate[]; 
               </span>
               {c.matched && c.matched.length > 0 && <span className="small accent">Matched: {c.matched.join(", ")}</span>}
               <OwnedBadges owned={c.owned} />
+              <FriendBadges friends={c.friends} />
             </span>
           </button>
         </li>

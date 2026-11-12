@@ -2,7 +2,7 @@
 
 **A private web app, installable on Android, that identifies a vinyl record, tells you which pressing it is and what it is worth, and keeps your collection and wantlist in one place.**
 
-Status: v1.0 · 2026-11-12 · **Weeks 1–5 built** (see README for setup and testing; differences from this plan are listed in §12)
+Status: v1.1 · 2026-11-12 · **First version built (weeks 1–8)**: see README for setup and testing; differences from this plan are listed in §12
 
 > **Project constraints**
 > - **Web app required**, and it **must run on Android** → built as an installable web app (PWA) that runs in Chrome on Android and in any desktop browser.
@@ -386,19 +386,26 @@ The app is **not reachable from the public internet**. Only devices on my Tailsc
 None blocking. Retention numbers (14 daily / 8 weekly / 12 monthly) and the 03:00 nightly export time can be adjusted in settings.
 
 
-## 12. Built so far (weeks 1–5) and differences from the plan
+## 12. What is built, and differences from the plan
 
-Built and tested: invite-only accounts, per-user Discogs link (sign-in or personal token), demo mode with fictional records, barcode scanning (camera, photo, typed), cover/label photo identification, text search, release page with EUR price card and deal check, pressing picker (runout, catalogue number, barcode, guided questions), add to collection/wantlist, offline-first phone database with full sync, offline search/browse/filter, offline barcode check, Docker image and `compose.yaml`.
+**Weeks 1–5:** invite-only accounts, per-user Discogs link (sign-in or personal token), demo mode with fictional records, barcode scanning (camera, photo, typed), cover/label photo identification, text search, release page with EUR price card and deal check, pressing picker (runout, catalogue number, barcode, guided questions), add to collection/wantlist, offline-first phone database with full sync, offline search/browse/filter, offline barcode check, Docker image and `compose.yaml`.
+
+**Week 6:** Discogs collection and wantlist import (grades and notes included, safe to run again), background completion of imported records (barcodes, runouts, tracklists for offline search), background price refresh (collection values stay current), value / paid / gain totals, opt-in and mutual sharing with friends (values a separate opt-in), friends' records view, CSV downloads, automatic exports and restore to the OneDrive `Sync` folder (Syndic approach + nightly/after-changes exports, retention, safety copy before restore, command line).
+
+**Weeks 7–8:** end-to-end tests for offline use and for week 6 features, guide for friends ([GUIDE.md](GUIDE.md)), fixes found while testing (API answers never cached by the browser; imported records fetch full details when opened; instant sharing switches; label photos read curved text).
 
 Differences from the plan:
-- **OCR runs on the server** (Tesseract in the Docker image) instead of in the browser: identification needs the server anyway, and phones avoid a ~10 MB download.
-- **Cover re-ranking uses a colour + layout comparison** instead of an ML model (CLIP). It only has to pick among a few Discogs candidates; an ML model can be added later if matching is weak on real covers.
-- **One container for now.** The background worker (scheduled exports, price watch) arrives with week 6.
-- **Demo mode** (`DISCOGS_MODE=demo`) was added so the whole app can be tried without a Discogs account.
-- **Personal access token** linking was added next to Discogs sign-in, so friends can link Discogs even before a Discogs developer app is registered.
+- **OCR runs on the server** (Tesseract in the Docker image) instead of in the browser: identification needs the server anyway, and phones avoid a ~10 MB download. Curved centre-label text is straightened before reading.
+- **Cover re-ranking uses a colour + layout comparison** instead of an ML model (CLIP). An ML model can be added later if matching is weak on real covers.
+- **Background jobs run inside the app container** instead of a separate worker container: simpler, same result.
+- **Demo mode** (`DISCOGS_MODE=demo`) and **personal-token linking** were added.
+- **Photos of your own copies** and **CSV import** (bringing edited CSV files back in) are not built; restore works with database snapshots. Both can follow.
+- **Photos are not in the exports** for the same reason (only Discogs covers exist, and those are re-downloaded).
 
-Not yet verified on real hardware: a real Android phone, the real Discogs API, and the Tesseract package install inside the image (that step was blocked in the build sandbox; it is a standard Debian package).
+Still "later" (post-MVP, from §6): price watch alerts, shop list/map, pushing additions back to Discogs, eBay prices, optional paid AI identification, sideloaded APK; audio recognition stays on hold.
+
+Not yet verified on real hardware: real Android phones beyond the owner's, the live Discogs import of a large collection, and the Tesseract/tzdata package install inside the image (blocked in the build sandbox; standard Debian packages).
 
 ---
 
-*Next step: run the README's setup on the Windows server, test on Android phones in demo mode, then switch to live Discogs; then week 6 (wantlist alerts, Discogs import, OneDrive exports, sharing).*
+*Next step: update the server (`git pull`, `docker compose up -d --build`), import your Discogs collection, check the first backup in `Sync`, and invite friends with docs/GUIDE.md.*

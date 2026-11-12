@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { addRelease } from "../actions";
 import { api } from "../api";
-import { Cover, ErrorNote, GradeSelect, OwnedBadges, PriceView, Section, eur } from "../components";
+import { Cover, ErrorNote, FriendBadges, GradeSelect, OwnedBadges, PriceView, Section, eur } from "../components";
 import { db } from "../db";
 import { go, useLive } from "../hooks";
 import type { PriceCard, Release as R } from "../types";
@@ -65,6 +65,7 @@ export default function Release({ id }: { id: number }) {
           <p className="muted small">{[r.year, r.country, r.formats[0]].filter(Boolean).join(" · ")}</p>
           <p className="small">{r.labels.map((l) => `${l.name} – ${l.catno}`).join(", ")}</p>
           <OwnedBadges owned={ownedKinds} />
+          <FriendBadges friends={release?.friends} />
         </div>
       </div>
       {!release && error && <p className="note">Showing the copy saved on this phone. {error}</p>}

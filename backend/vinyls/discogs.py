@@ -228,3 +228,34 @@ async def oauth_access_token(request_token: str, request_secret: str, verifier: 
         raise DiscogsError(f"Discogs sign-in failed ({response.status_code}).")
     data = dict(urllib.parse.parse_qsl(response.text))
     return data["oauth_token"], data["oauth_token_secret"]
+
+
+# ---------------------------------------------------------------- collection & wantlist (import)
+
+async def collection_fields(creds: Credentials, username: str) -> list[dict[str, Any]]:
+    if creds.method == "demo":
+        return demo_data.collection_fields()
+    data = await _get(creds, f"/users/{username}/collection/fields")
+    return data.get("fields", [])
+
+
+async def collection_page(creds: Credentials, username: str, page: int) -> dict[str, Any]:
+    if creds.method == "demo":
+        return demo_data.collection_page(page)
+    return await _get(creds, f"/users/{username}/collection/folders/0/releases",
+                      {"page": page, "per_page": 100, "sort": "added", "sort_order": "asc"})
+
+
+async def wantlist_page(creds: Credentials, username: str, page: int) -> dict[str, Any]:
+    if creds.method == "demo":
+        return demo_data.wantlist_page(page)
+    return await _get(creds, f"/users/{username}/wants", {"page": page, "per_page": 100})
+
+
+def linked_username(user_id: int) -> str:
+    if settings.demo:
+        return "demo"
+    row = db.one("SELECT username FROM discogs_links WHERE user_id=?", (user_id,))
+    if row is None or not row["username"]:
+        raise NotLinked()
+    return row["username"]

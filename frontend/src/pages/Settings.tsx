@@ -5,6 +5,7 @@ import { db } from "../db";
 import { useLive, useSync } from "../hooks";
 import { requestPersistence, syncNow } from "../sync";
 import type { User } from "../types";
+import { BackupsCard, ExportCard, ImportCard, SharingCard } from "./SettingsCards";
 
 interface DiscogsStatus {
   linked: boolean;
@@ -143,6 +144,11 @@ export default function Settings({ user, onSignOut }: { user: User; onSignOut: (
           </>
         )}
       </Section>
+
+      {discogs && <ImportCard linked={discogs.linked} />}
+      <SharingCard />
+      <ExportCard />
+      {user.is_admin && <BackupsCard />}
 
       {user.is_admin && (
         <Section title="Invite friends" right={<button className="secondary" onClick={newInvite}>New invite</button>}>

@@ -62,7 +62,9 @@ def cached_release(release_id: int) -> dict[str, Any] | None:
 
 
 async def get_release(creds: discogs.Credentials, release_id: int, refresh: bool = False) -> dict[str, Any]:
-    row = db.one("SELECT data, fetched_at FROM releases WHERE id=?", (release_id,))
+    row = db.one("SELECT data, fetched_at, complete FROM releases WHERE id=?", (release_id,))
+    if row and not row["complete"]:
+        refresh = True  # only the short import summary is known: get the full release
     if row and not refresh:
         age = datetime.now(timezone.utc) - datetime.fromisoformat(row["fetched_at"])
         if age < timedelta(days=settings.release_ttl_days):
@@ -74,11 +76,40 @@ async def get_release(creds: discogs.Credentials, release_id: int, refresh: bool
             return json.loads(row["data"])
         raise
     release = normalise_release(raw)
+    store_release(release, complete=True)
+    return release
+
+
+def store_release(release: dict[str, Any], complete: bool) -> None:
+    """Save a normalised release; bumps its sequence number so phones pick up the change."""
+    if not complete:
+        existing = db.one("SELECT complete FROM releases WHERE id=?", (release["id"],))
+        if existing and existing["complete"]:
+            return  # never replace full data with the shorter import summary
     db.run(
-        "INSERT INTO releases(id, master_id, data, fetched_at) VALUES (?,?,?,?) "
-        "ON CONFLICT(id) DO UPDATE SET master_id=excluded.master_id, data=excluded.data, fetched_at=excluded.fetched_at",
-        (release["id"], release["master_id"], db.dumps(release), db.now()),
+        "INSERT INTO releases(id, master_id, data, fetched_at, seq, complete) VALUES (?,?,?,?,?,?) "
+        "ON CONFLICT(id) DO UPDATE SET master_id=excluded.master_id, data=excluded.data, fetched_at=excluded.fetched_at, "
+        "seq=excluded.seq, complete=excluded.complete",
+        (release["id"], release["master_id"], db.dumps(release), db.now(), db.next_seq(), int(complete)),
     )
+
+
+def release_from_basic(basic: dict[str, Any]) -> dict[str, Any]:
+    """Discogs collection/wantlist entries carry a short summary (no barcodes, runouts or tracklist)."""
+    raw = {
+        "id": basic["id"],
+        "master_id": basic.get("master_id"),
+        "title": basic.get("title", ""),
+        "artists": basic.get("artists") or [],
+        "year": basic.get("year"),
+        "labels": basic.get("labels") or [],
+        "formats": basic.get("formats") or [],
+        "genres": basic.get("genres") or [],
+        "styles": basic.get("styles") or [],
+        "images": [{"type": "primary", "uri": basic.get("cover_image") or basic.get("thumb") or ""}],
+    }
+    release = normalise_release(raw)
+    release["partial"] = True
     return release
 
 

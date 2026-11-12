@@ -43,17 +43,42 @@ def _item(row) -> dict[str, Any]:
 
 @router.get("")
 def pull(since: int = 0, user: dict = Depends(current_user)) -> dict[str, Any]:
-    rows = db.all_("SELECT * FROM items WHERE user_id=? AND seq>? ORDER BY seq LIMIT 5000", (user["id"], since))
+    """Items changed since the cursor, plus releases and prices that are new or changed for this user's records."""
+    uid = user["id"]
+    rows = db.all_("SELECT * FROM items WHERE user_id=? AND seq>? ORDER BY seq LIMIT 5000", (uid, since))
     items = [_item(r) for r in rows]
-    release_ids = sorted({i["release_id"] for i in items if not i["deleted"]})
-    releases, prices = [], []
-    for chunk in (release_ids[i:i + 500] for i in range(0, len(release_ids), 500)):
-        marks = ",".join("?" * len(chunk))
-        releases += [json.loads(r["data"]) for r in db.all_(f"SELECT data FROM releases WHERE id IN ({marks})", chunk)]
-        prices += [json.loads(r["data"]) for r in db.all_(f"SELECT data FROM prices WHERE release_id IN ({marks})", chunk)]
-    cursor = items[-1]["seq"] if items else since
     more = len(rows) == 5000
-    return {"cursor": cursor, "more": more, "items": items, "releases": releases, "prices": prices}
+    upper = items[-1]["seq"] if more else None
+    changed_ids = sorted({i["release_id"] for i in items if not i["deleted"]})
+    active = "SELECT DISTINCT release_id FROM items WHERE user_id=? AND deleted=0"
+    bound, bound_params = ("AND seq<=?", (upper,)) if upper is not None else ("", ())
+    rel_rows = db.all_(f"SELECT data, seq FROM releases WHERE seq>? {bound} AND id IN ({active})", (since, *bound_params, uid))
+    price_rows = db.all_(f"SELECT data, seq FROM prices WHERE seq>? {bound} AND release_id IN ({active})", (since, *bound_params, uid))
+    releases = {json.loads(r["data"])["id"]: json.loads(r["data"]) for r in rel_rows}
+    prices = {json.loads(r["data"])["release_id"]: json.loads(r["data"]) for r in price_rows}
+    # records that changed (e.g. re-added) also need their release and price, whatever their age
+    missing = [rid for rid in changed_ids if rid not in releases]
+    for chunk in (missing[i:i + 500] for i in range(0, len(missing), 500)):
+        marks = ",".join("?" * len(chunk))
+        for r in db.all_(f"SELECT data FROM releases WHERE id IN ({marks})", chunk):
+            d = json.loads(r["data"])
+            releases[d["id"]] = d
+        for r in db.all_(f"SELECT data FROM prices WHERE release_id IN ({marks})", chunk):
+            d = json.loads(r["data"])
+            prices.setdefault(d["release_id"], d)
+    seqs = [since] + [i["seq"] for i in items] + [r["seq"] for r in rel_rows] + [r["seq"] for r in price_rows]
+    cursor = upper if upper is not None else max(seqs)
+    return {"cursor": cursor, "more": more, "generation": generation(), "items": items,
+            "releases": list(releases.values()), "prices": list(prices.values())}
+
+
+def generation() -> str:
+    """Changes when the database is restored from a backup: phones then download everything again."""
+    value = db.get_state("generation")
+    if value is None:
+        value = "g1"
+        db.set_state("generation", value)
+    return value
 
 
 @router.post("")
@@ -83,4 +108,7 @@ async def push(body: PushBody, user: dict = Depends(current_user)) -> dict[str, 
             (op.id, user["id"], op.release_id, op.kind, db.dumps(fields), op.updated_at, int(op.deleted), db.next_seq()),
         )
         applied.append(op.id)
+    if applied:
+        db.set_state("changes_since_export", int(db.get_state("changes_since_export", "0")) + len(applied))
+        db.set_state("last_change_at", db.now())
     return {"applied": applied, "skipped": skipped}

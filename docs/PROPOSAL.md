@@ -2,7 +2,7 @@
 
 **A private web app, installable on Android, that identifies a vinyl record, tells you which pressing it is and what it is worth, and keeps your collection and wantlist in one place.**
 
-Status: Draft proposal · v0.9 · 2026-11-12
+Status: v1.0 · 2026-11-12 · **Weeks 1–5 built** (see README for setup and testing; differences from this plan are listed in §12)
 
 > **Project constraints**
 > - **Web app required**, and it **must run on Android** → built as an installable web app (PWA) that runs in Chrome on Android and in any desktop browser.
@@ -185,8 +185,8 @@ Trade-off: camera control and scanning speed are a little below a native app. Th
 | Offline storage | IndexedDB via Dexie, persistent storage requested; service worker (Workbox) for the app shell and thumbnails | Whole collection usable with no signal |
 | Offline search | MiniSearch (or FlexSearch) index built on the phone | Instant search as you type, no server needed |
 | Barcode | Browser BarcodeDetector API, ZXing-js fallback | Fast on Android Chrome |
-| OCR | Tesseract.js (in browser) | Free, offline; runout text needs manual correction anyway |
-| Cover re-ranking | Small image-embedding model (e.g. CLIP via ONNX Runtime) on the backend | Compares the photo with a handful of candidate covers only |
+| OCR | Tesseract on the server (in the Docker image) | Free; identification needs a connection anyway, and phones don't have to download ~10 MB of OCR data |
+| Cover re-ranking | Colour + layout comparison (Pillow) on the backend; an ML model (e.g. CLIP) can replace it later | Compares the photo with a handful of candidate covers only; no large model to download or run |
 | Backend | Python + FastAPI | Simple; good image/ML libraries |
 | Database | SQLite inside a Docker volume | Plenty for a few users; snapshots exported to a Windows folder (§5.6) |
 | Hosting | Docker Desktop (WSL 2) on my Windows home server, one `docker compose` file | Uses hardware I already have; €0/month |
@@ -385,6 +385,20 @@ The app is **not reachable from the public internet**. Only devices on my Tailsc
 
 None blocking. Retention numbers (14 daily / 8 weekly / 12 monthly) and the 03:00 nightly export time can be adjusted in settings.
 
+
+## 12. Built so far (weeks 1–5) and differences from the plan
+
+Built and tested: invite-only accounts, per-user Discogs link (sign-in or personal token), demo mode with fictional records, barcode scanning (camera, photo, typed), cover/label photo identification, text search, release page with EUR price card and deal check, pressing picker (runout, catalogue number, barcode, guided questions), add to collection/wantlist, offline-first phone database with full sync, offline search/browse/filter, offline barcode check, Docker image and `compose.yaml`.
+
+Differences from the plan:
+- **OCR runs on the server** (Tesseract in the Docker image) instead of in the browser: identification needs the server anyway, and phones avoid a ~10 MB download.
+- **Cover re-ranking uses a colour + layout comparison** instead of an ML model (CLIP). It only has to pick among a few Discogs candidates; an ML model can be added later if matching is weak on real covers.
+- **One container for now.** The background worker (scheduled exports, price watch) arrives with week 6.
+- **Demo mode** (`DISCOGS_MODE=demo`) was added so the whole app can be tried without a Discogs account.
+- **Personal access token** linking was added next to Discogs sign-in, so friends can link Discogs even before a Discogs developer app is registered.
+
+Not yet verified on real hardware: a real Android phone, the real Discogs API, and the Tesseract package install inside the image (that step was blocked in the build sandbox; it is a standard Debian package).
+
 ---
 
-*Next step: link `D:\OneDrive\Python\33Vinyls` to GitHub (see README), set `Sync` to *Always keep on this device*, install Tailscale on the Windows server (Docker Desktop is already running Syndic), register a Discogs developer app (for the OAuth sign-in), and build the week-1 PWA shell.*
+*Next step: run the README's setup on the Windows server, test on Android phones in demo mode, then switch to live Discogs; then week 6 (wantlist alerts, Discogs import, OneDrive exports, sharing).*

@@ -1,0 +1,19 @@
+# 33Vinyls on the Windows home server (Docker Desktop). Start/update: docker compose up -d --build
+services:
+  vinyls:
+    build: .
+    image: 33vinyls:latest
+    container_name: 33vinyls
+    ports:
+      # Only reachable from this PC; phones use the Tailscale HTTPS address (tailscale serve → 7510).
+      - "127.0.0.1:7510:8000"
+    env_file:
+      - path: .env          # settings and secrets, read at start-up, never baked into the image
+        required: false
+    volumes:
+      - vinyls-data:/data   # named volume: live database, covers, secret key (same pattern as Syndic)
+      - ./Sync:/sync        # D:\OneDrive\Python\33Vinyls\Sync — used by the exports (week 6)
+    restart: unless-stopped
+
+volumes:
+  vinyls-data:

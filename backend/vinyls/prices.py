@@ -59,9 +59,9 @@ async def price_card(creds: discogs.Credentials, release_id: int, refresh: bool 
         "note": None if by_grade else "No per-condition suggestions: fill in your Discogs seller settings (currency EUR) to get them.",
     }
     db.run(
-        "INSERT INTO prices(release_id, data, fetched_at) VALUES (?,?,?) "
-        "ON CONFLICT(release_id) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at",
-        (release_id, db.dumps(card), card["fetched_at"]),
+        "INSERT INTO prices(release_id, data, fetched_at, seq) VALUES (?,?,?,?) "
+        "ON CONFLICT(release_id) DO UPDATE SET data=excluded.data, fetched_at=excluded.fetched_at, seq=excluded.seq",
+        (release_id, db.dumps(card), card["fetched_at"], db.next_seq()),
     )
     return card
 

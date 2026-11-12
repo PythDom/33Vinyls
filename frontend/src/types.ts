@@ -18,6 +18,13 @@ export interface Release {
   image: string;
   discogs_url: string;
   owned?: Kind[];
+  friends?: FriendMark[];
+  partial?: boolean;
+}
+
+export interface FriendMark {
+  name: string;
+  kind: Kind;
 }
 
 export interface ItemFields {
@@ -69,6 +76,7 @@ export interface Candidate {
   format: string;
   thumb: string;
   owned: Kind[];
+  friends?: FriendMark[];
   score?: number;
   matched?: string[];
   image_score?: number;

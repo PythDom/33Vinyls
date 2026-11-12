@@ -36,6 +36,7 @@ export function subscribeSync(listener: Listener) {
 
 interface PullResponse {
   cursor: number;
+  generation: string;
   more: boolean;
   items: (Omit<LocalItem, "dirty" | "deleted"> & { deleted: boolean; seq: number })[];
   releases: Release[];
@@ -86,6 +87,20 @@ async function pull() {
   let cursor = await d.getMeta("cursor", 0);
   for (;;) {
     const data = await api<PullResponse>(`/api/sync?since=${cursor}`, { timeout: 30000 });
+    const known = await d.getMeta<string | null>("generation", null);
+    if (known && data.generation !== known && cursor !== 0) {
+      // the server was restored from a backup: start again from scratch (unsynced edits are kept)
+      await d.transaction("rw", [d.items, d.releases, d.prices, d.meta], async () => {
+        await d.items.where("dirty").equals(0).delete();
+        await d.releases.clear();
+        await d.prices.clear();
+        await d.setMeta("cursor", 0);
+        await d.setMeta("generation", data.generation);
+      });
+      cursor = 0;
+      continue;
+    }
+    if (known !== data.generation) await d.setMeta("generation", data.generation);
     await d.transaction("rw", [d.items, d.releases, d.prices, d.meta], async () => {
       if (data.releases.length) await d.releases.bulkPut(data.releases);
       if (data.prices.length) await d.prices.bulkPut(data.prices);

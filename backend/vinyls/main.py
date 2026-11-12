@@ -1,26 +1,44 @@
 """FastAPI application: API under /api, the installable web app (PWA) everywhere else."""
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, api, auth, db, sync
+from . import __version__, api, auth, backup, db, importer, jobs, sharing, sync
 from .config import settings
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.migrate()
+    task = asyncio.create_task(jobs.loop()) if settings.background_jobs else None
     yield
+    if task:
+        task.cancel()
 
 
 app = FastAPI(title="33Vinyls", version=__version__, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
+
+
+@app.middleware("http")
+async def no_store_api(request, call_next):
+    """API answers change (prices, sharing, ownership): never let the browser reuse an old one."""
+    response = await call_next(request)
+    if request.url.path.startswith("/api/") and "cache-control" not in response.headers:
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 app.include_router(auth.router)
 app.include_router(sync.router)
 app.include_router(api.router)
+app.include_router(importer.router)
+app.include_router(sharing.router)
+app.include_router(backup.router)
 
 
 @app.get("/api/health")

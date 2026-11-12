@@ -254,3 +254,49 @@ def cover_png(release_id: int) -> bytes:
     buf = io.BytesIO()
     img.save(buf, "PNG")
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------- demo Discogs collection & wantlist
+
+def _basic(rid: int) -> dict[str, Any]:
+    r = _RELEASES[rid]
+    return {
+        "id": rid, "master_id": r["master_id"], "title": r["title"], "year": r["year"],
+        "artists": r["artists"], "labels": r["labels"], "formats": r["formats"],
+        "genres": r["genres"], "styles": r["styles"], "thumb": r["thumb"], "cover_image": r["thumb"],
+    }
+
+
+_DEMO_COLLECTION = [  # (release, media, sleeve, notes)
+    (100103, "Very Good Plus (VG+)", "Very Good (VG)", "Bought at the Brussels record fair"),
+    (100202, "Near Mint (NM or M-)", "Near Mint (NM or M-)", ""),
+    (100302, "Very Good (VG)", "Good Plus (G+)", "Small seam split"),
+    (100401, "Very Good Plus (VG+)", "Very Good Plus (VG+)", ""),
+    (100501, "Near Mint (NM or M-)", "Very Good Plus (VG+)", ""),
+    (100601, "Good Plus (G+)", "Good (G)", ""),
+    (100701, "Very Good Plus (VG+)", "Very Good (VG)", "Mono"),
+    (100801, "Near Mint (NM or M-)", "", ""),
+]
+_DEMO_WANTS = [100101, 100201, 100203]
+
+
+def collection_fields() -> list[dict[str, Any]]:
+    return [{"id": 1, "name": "Media Condition"}, {"id": 2, "name": "Sleeve Condition"}, {"id": 3, "name": "Notes"}]
+
+
+def collection_page(page: int) -> dict[str, Any]:
+    releases = []
+    for n, (rid, media, sleeve, note) in enumerate(_DEMO_COLLECTION, start=1):
+        notes = [{"field_id": 1, "value": media}]
+        if sleeve:
+            notes.append({"field_id": 2, "value": sleeve})
+        if note:
+            notes.append({"field_id": 3, "value": note})
+        releases.append({"id": rid, "instance_id": 5000 + n, "date_added": f"2024-0{1 + n % 9}-1{n}T10:00:00-08:00",
+                         "basic_information": _basic(rid), "notes": notes})
+    return {"pagination": {"page": 1, "pages": 1}, "releases": releases if page == 1 else []}
+
+
+def wantlist_page(page: int) -> dict[str, Any]:
+    wants = [{"id": rid, "notes": "", "basic_information": _basic(rid)} for rid in _DEMO_WANTS]
+    return {"pagination": {"page": 1, "pages": 1}, "wants": wants if page == 1 else []}

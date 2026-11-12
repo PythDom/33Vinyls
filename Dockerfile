@@ -13,9 +13,10 @@ FROM python:3.13-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     VINYLS_DATA_DIR=/data \
-    VINYLS_STATIC_DIR=/app/static
+    VINYLS_STATIC_DIR=/app/static \
+    VINYLS_SYNC_DIR=/sync
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra tesseract-ocr-deu \
+ && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra tesseract-ocr-deu tzdata \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY backend/requirements.txt ./

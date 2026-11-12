@@ -8,9 +8,13 @@ A private music record **identifier, pressing detector & finder** for price chec
 - Pin down the exact pressing from the runout, catalogue number, barcode or a few quick questions
 - Condition-aware price card and an instant "is it a deal?" verdict
 - Whole collection and wantlist **searchable and browsable offline** on the phone
+- Import your Discogs collection and wantlist; prices kept up to date in the background; value, paid and gain totals
+- Opt-in, mutual sharing with friends ("Alex has this" / "Sam wants this")
+- Automatic backups to the OneDrive `Sync` folder (nightly + after bursts of changes), restore from the app
+- CSV downloads that open in Excel (EUR format)
 - Each friend links their own Discogs account; invite-only accounts; Tailscale-only access
 
-Status: weeks 1–5 of the [proposal](docs/PROPOSAL.md) are built (see §12 there for what differs from the plan).
+Status: the full first version (weeks 1–8) of the [proposal](docs/PROPOSAL.md) is built; see §12 there for what differs from the plan. Guide for friends: [docs/GUIDE.md](docs/GUIDE.md).
 
 ---
 
@@ -66,7 +70,25 @@ Keep this address fixed: the phones' offline copy belongs to it.
 
 Records added in demo mode use fictional IDs: remove them, or start with a fresh volume, before going live.
 
-## 5. Test checklist (on a real phone)
+## 5. Backups (OneDrive `Sync` folder)
+
+The live data stays in the Docker volume. Copies go to `D:\OneDrive\Python\33Vinyls\Sync`, which OneDrive uploads:
+
+```
+Sync\
+├─ db\        33vinyls-2026-11-12T0300.sqlite3   database snapshots (14 daily, 8 weekly, 12 monthly kept)
+│             db-before-restore-….sqlite3         safety copy made before every restore
+├─ export\    <user>\collection.csv, wantlist.csv, collection.json
+└─ restore\   put a snapshot here to restore it
+```
+
+- **Automatic:** every night at `NIGHTLY_EXPORT` (default 03:00, time zone `TZ` in `.env`), and 10 minutes after 25 or more changes (e.g. an import).
+- **Manual:** Settings → *Backups* → **Export now** (admin), or on the server: `docker exec 33vinyls python -m vinyls.backup export`.
+- **Restore:** Settings → *Backups* → *Restore from a backup…*, pick a file, tick the box, **Restore**. The current data is saved first. Phones download everything again on their next sync; nobody has to sign in or re-link Discogs. Command line: `docker exec 33vinyls python -m vinyls.backup restore /sync/restore/<file>.sqlite3`.
+- Never exported: sign-in sessions, Discogs tokens, the secret key, `.env`.
+- In OneDrive, set the `Sync` folder to **Always keep on this device**.
+
+## 6. Test checklist (on a real phone)
 
 In demo mode:
 
@@ -75,6 +97,9 @@ In demo mode:
 3. **Scan** → type barcode `5054197012341` → it finds the 2015 reissue. Try the camera on any real record barcode too (it will show "no match" in demo mode, which proves the scanner works).
 4. Settings shows **✓ Offline ready**.
 5. **Airplane mode** → close the app → reopen from the home screen → search, filter, open records with covers, edit a note → turn airplane mode off → the chip goes back to *Synced*.
+6. Settings → **Import collection & wantlist** → 11 demo records appear; the value totals fill in over the next minutes.
+7. Settings → **Export now** → a new file appears in `Sync\db` and `Sync\export\<you>`.
+8. With a friend: both turn on sharing → a record they own shows "<name> has this"; Settings → *Friends' records*.
 
 The same checks run automatically: see *Development* below.
 
@@ -97,7 +122,8 @@ Afterwards: `git pull` to get updates. `git status` should never list anything u
 ## Development
 
 ```
-backend/   FastAPI + SQLite API (Python 3.13), Discogs client, demo catalogue, OCR, pressing detector
+backend/   FastAPI + SQLite API (Python 3.13), Discogs client, demo catalogue, OCR, pressing detector,
+           import, sharing, backups, background jobs (enrich records, refresh prices, nightly export)
 frontend/  React + Vite PWA, Dexie (IndexedDB) offline store, MiniSearch offline search
 e2e/       Browser test of the offline must-have (Playwright, Android phone emulation)
 ```
@@ -112,8 +138,9 @@ cd frontend && npm ci && npm test && npm run build
 # run locally: API serving the built app, demo data
 cd backend && VINYLS_DATA_DIR=./.data VINYLS_STATIC_DIR=../frontend/dist DISCOGS_MODE=demo SECURE_COOKIES=false uvicorn vinyls.main:app --port 8000
 
-# end-to-end offline test (needs Playwright + Chromium), against a fresh server
+# end-to-end tests (need Playwright + Chromium), each against a fresh server with demo data
 node e2e/offline.mjs http://localhost:8000
+node e2e/week6.mjs http://localhost:8000     # needs VINYLS_SYNC_DIR pointing to a writable folder
 ```
 
 API docs: `/api/docs` on a running server.

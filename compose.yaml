@@ -12,7 +12,7 @@ services:
         required: false
     volumes:
       - vinyls-data:/data   # named volume: live database, covers, secret key (same pattern as Syndic)
-      - ./Sync:/sync        # D:\OneDrive\Python\33Vinyls\Sync — used by the exports (week 6)
+      - ./Sync:/sync        # D:\OneDrive\Python\33Vinyls\Sync — automatic backups and exports
     restart: unless-stopped
 
 volumes:

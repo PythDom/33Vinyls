@@ -4,6 +4,7 @@ import { openDB, rememberUser, savedUser } from "./db";
 import { go, useHashRoute, useSync } from "./hooks";
 import Collection from "./pages/Collection";
 import Find from "./pages/Find";
+import Friends from "./pages/Friends";
 import Item from "./pages/Item";
 import Login from "./pages/Login";
 import Pressing from "./pages/Pressing";
@@ -87,6 +88,9 @@ export default function App() {
     case "pressing":
       page = <Pressing masterId={Number(arg)} params={params} key={arg} />;
       break;
+    case "friends":
+      page = <Friends friendId={arg} params={params} key={`${arg}-${params.get("kind")}`} />;
+      break;
     case "settings":
       page = <Settings user={user} onSignOut={() => { rememberUser(null); resetSyncState(); setUser(null); go("/"); }} />;
       break;
@@ -114,7 +118,7 @@ export default function App() {
         <button aria-current={["find", "release", "pressing"].includes(tab)} onClick={() => go("/find")}>
           <span aria-hidden>⌕</span>Find
         </button>
-        <button aria-current={tab === "settings"} onClick={() => go("/settings")}>
+        <button aria-current={["settings", "friends"].includes(tab)} onClick={() => go("/settings")}>
           <span aria-hidden>⚙</span>Settings
         </button>
       </nav>

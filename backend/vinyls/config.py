@@ -16,6 +16,10 @@ def _bool(name: str, default: bool) -> bool:
 @dataclass
 class Settings:
     data_dir: Path = field(default_factory=lambda: Path(os.environ.get("VINYLS_DATA_DIR", "/data")))
+    sync_dir: Path = field(default_factory=lambda: Path(os.environ.get("VINYLS_SYNC_DIR", "/sync")))
+    # local time of the nightly export, HH:MM (container time zone: TZ in .env)
+    nightly_export: str = field(default_factory=lambda: os.environ.get("NIGHTLY_EXPORT", "03:00"))
+    background_jobs: bool = field(default_factory=lambda: _bool("BACKGROUND_JOBS", True))
     static_dir: Path = field(default_factory=lambda: Path(os.environ.get("VINYLS_STATIC_DIR", "/app/static")))
     # "live" talks to api.discogs.com; "demo" uses built-in fake data (no account needed).
     discogs_mode: str = field(default_factory=lambda: os.environ.get("DISCOGS_MODE", "live").strip().lower())

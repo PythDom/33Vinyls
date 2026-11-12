@@ -1,0 +1,9 @@
+.git
+Sync
+**/node_modules
+frontend/dist
+**/__pycache__
+**/.pytest_cache
+.env
+e2e
+docs
